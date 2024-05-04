@@ -1,0 +1,34 @@
+FROM php:8.2.11-fpm-bookworm
+
+ENV COMPOSER_ALLOW_SUPERUSER 1
+ENV COMPOSER_HOME /composer
+ENV COMPOSER_MEMORY_LIMIT -1
+
+# System
+RUN set -eux \
+    && apt-get update \
+    && apt-get install -y sudo vim curl jq procps cron
+
+# PHP modules
+RUN set -eux \
+    && apt-get update \
+    && apt-get install -y $PHPIZE_DEPS ca-certificates xz-utils --no-install-recommends \
+    && apt-get install -y zlib1g git libicu-dev libxml2-dev libxslt-dev libpng-dev apt-utils gnupg zlib1g-dev libzip-dev --no-install-recommends \
+    && docker-php-ext-enable opcache \
+    && docker-php-ext-install zip bcmath calendar exif intl gd gettext pcntl pdo_mysql mysqli shmop sockets sysvmsg sysvsem sysvshm xsl \
+    && git clone https://github.com/phpredis/phpredis.git /usr/src/php/ext/redis \
+    && docker-php-ext-install redis
+
+# Composer
+RUN php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');" \
+    && php composer-setup.php --version=2.6.5 \
+    && php -r "unlink('composer-setup.php');" \
+    && mv composer.phar /usr/local/bin/composer
+
+# Bash Prompt
+RUN set -eux \
+    && echo '[ "$PS1" = "\\s-\\v\\\$ " ] && PS1="[\u@\h \W]\\$ "' > /root/.bashrc \
+    && echo '[ "$PS1" = "\\s-\\v\\\$ " ] && PS1="[\u@\h \W]\\$ "' > /home/app/.bashrc \
+    && chown app. /home/app/.bashrc
+
+

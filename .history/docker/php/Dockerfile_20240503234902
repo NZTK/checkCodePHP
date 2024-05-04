@@ -1,0 +1,54 @@
+FROM php:8.2.11-fpm-bookworm AS app
+
+ARG RUN_USER_UID=1000
+
+ENV COMPOSER_ALLOW_SUPERUSER 1
+ENV COMPOSER_HOME /composer
+ENV COMPOSER_MEMORY_LIMIT -1
+ENV PATH $PATH:/composer/vendor/bin
+
+# System
+RUN set -eux \
+    && apt-get update \
+    && apt-get install -y sudo vim curl jq procps cron
+
+# PHP modules
+RUN set -eux \
+    && addgroup --gid ${RUN_USER_UID} app \
+    && adduser --gecos "" --disabled-password --uid ${RUN_USER_UID} --gid ${RUN_USER_UID} app \
+    && apt-get update \
+    && apt-get install -y $PHPIZE_DEPS ca-certificates xz-utils --no-install-recommends \
+    && apt-get install -y zlib1g git libicu-dev libxml2-dev libxslt-dev libpng-dev apt-utils gnupg zlib1g-dev libzip-dev --no-install-recommends \
+    && docker-php-ext-enable opcache \
+    && docker-php-ext-install zip bcmath calendar exif intl gd gettext pcntl pdo_mysql mysqli shmop sockets sysvmsg sysvsem sysvshm xsl \
+    && git clone https://github.com/phpredis/phpredis.git /usr/src/php/ext/redis \
+    && docker-php-ext-install redis
+
+# Composer
+RUN php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');" \
+    && php composer-setup.php --version=2.6.5 \
+    && php -r "unlink('composer-setup.php');" \
+    && mv composer.phar /usr/local/bin/composer
+
+# APCu
+RUN yes '' | pecl install apcu-5.1.22 \
+    && docker-php-ext-enable apcu
+
+# mysql client
+RUN set -eux \
+    && apt-get update && apt-get install -y default-mysql-client
+
+# Bash Prompt
+RUN set -eux \
+    && echo '[ "$PS1" = "\\s-\\v\\\$ " ] && PS1="[\u@\h \W]\\$ "' > /root/.bashrc \
+    && echo '[ "$PS1" = "\\s-\\v\\\$ " ] && PS1="[\u@\h \W]\\$ "' > /home/app/.bashrc \
+    && chown app. /home/app/.bashrc
+
+# php-fpm
+EXPOSE 9000 9001
+
+# user
+USER ${RUN_USER_UID}
+
+# workdir
+WORKDIR /var/www/app
